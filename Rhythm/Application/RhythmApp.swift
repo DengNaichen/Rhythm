@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 @main
@@ -6,7 +7,6 @@ struct RhythmApp: App {
 
     init() {
         AppIdentityMigration.run()
-        SettingsWindowStateMigration.run()
     }
 
     var body: some Scene {
@@ -17,41 +17,25 @@ struct RhythmApp: App {
         }
         .menuBarExtraStyle(.menu)
 
-        Settings {
+        Window("Settings", id: AppSceneID.settings) {
             SettingView()
                 .environment(appModel)
         }
+        .defaultLaunchBehavior(.suppressed)
         .defaultSize(width: SettingsMetrics.windowWidth, height: SettingsMetrics.windowHeight)
-
         .commands {
-            CommandGroup(replacing: .appTermination) {
-                Button("Quit") {
-                    NSApplication.shared.terminate(nil)
-                }
-                .keyboardShortcut("q", modifiers: .command)
-            }
+            AppMenuCommands()
         }
     }
 }
 
-private enum SettingsWindowStateMigration {
-    private static let resetKey = "settings.didResetWindowState.v3"
-    private static let windowFrameKey = "NSWindow Frame com_apple_SwiftUI_Settings_window"
-    private static let splitViewFramesKey =
-        "NSSplitView Subview Frames com_apple_SwiftUI_Settings_window, SidebarNavigationSplitView"
-
-    static func run(defaults: UserDefaults = .standard) {
-        guard !defaults.bool(forKey: resetKey) else {
-            return
-        }
-
-        defaults.removeObject(forKey: windowFrameKey)
-        defaults.removeObject(forKey: splitViewFramesKey)
-        defaults.set(true, forKey: resetKey)
-    }
+private enum AppSceneID {
+    static let settings = "settings"
 }
 
 private struct MenuBarMenuContent: View {
+    @Environment(\.openWindow) private var openWindow
+
     private var appName: String {
         Bundle.main.name ?? "Rhythm"
     }
@@ -65,8 +49,8 @@ private struct MenuBarMenuContent: View {
     }
 
     var body: some View {
-        SettingsLink {
-            Text("Settings...")
+        Button("Settings...") {
+            openWindow(id: AppSceneID.settings)
         }
         .keyboardShortcut(",", modifiers: .command)
 
@@ -80,6 +64,26 @@ private struct MenuBarMenuContent: View {
             NSApplication.shared.terminate(nil)
         }
         .keyboardShortcut("q", modifiers: .command)
+    }
+}
+
+private struct AppMenuCommands: Commands {
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some Commands {
+        CommandGroup(replacing: .appSettings) {
+            Button("Settings...") {
+                openWindow(id: AppSceneID.settings)
+            }
+            .keyboardShortcut(",", modifiers: .command)
+        }
+
+        CommandGroup(replacing: .appTermination) {
+            Button("Quit") {
+                NSApplication.shared.terminate(nil)
+            }
+            .keyboardShortcut("q", modifiers: .command)
+        }
     }
 }
 

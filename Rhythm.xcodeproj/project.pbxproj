@@ -7,9 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-			6DE505852F63C62200B1CAAF /* MCP in Frameworks */ = {isa = PBXBuildFile; productRef = A10000012F70000100000003 /* MCP */; };
-			6DE505862F63C62200B1CAAF /* JSONSchema in Frameworks */ = {isa = PBXBuildFile; productRef = A10000012F70000100000004 /* JSONSchema */; };
-			A10000012F70000100000005 /* Ontology in Frameworks */ = {isa = PBXBuildFile; productRef = A10000012F70000100000007 /* Ontology */; };
+		6DE505852F63C62200B1CAAF /* MCP in Frameworks */ = {isa = PBXBuildFile; productRef = A10000012F70000100000003 /* MCP */; };
+		6DE505862F63C62200B1CAAF /* JSONSchema in Frameworks */ = {isa = PBXBuildFile; productRef = A10000012F70000100000004 /* JSONSchema */; };
+		A10000012F70000100000005 /* Ontology in Frameworks */ = {isa = PBXBuildFile; productRef = A10000012F70000100000007 /* Ontology */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -54,16 +54,16 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
-			6DE504712F639FCC00B1CAAF /* Frameworks */ = {
-				isa = PBXFrameworksBuildPhase;
-				buildActionMask = 2147483647;
-				files = (
-					6DE505862F63C62200B1CAAF /* JSONSchema in Frameworks */,
-					6DE505852F63C62200B1CAAF /* MCP in Frameworks */,
-					A10000012F70000100000005 /* Ontology in Frameworks */,
-				);
-				runOnlyForDeploymentPostprocessing = 0;
-			};
+		6DE504712F639FCC00B1CAAF /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6DE505862F63C62200B1CAAF /* JSONSchema in Frameworks */,
+				6DE505852F63C62200B1CAAF /* MCP in Frameworks */,
+				A10000012F70000100000005 /* Ontology in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		6DE504802F639FCE00B1CAAF /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -121,11 +121,11 @@
 				6DE504762F639FCC00B1CAAF /* Rhythm */,
 			);
 			name = Rhythm;
-				packageProductDependencies = (
-					A10000012F70000100000003 /* MCP */,
-					A10000012F70000100000004 /* JSONSchema */,
-					A10000012F70000100000007 /* Ontology */,
-				);
+			packageProductDependencies = (
+				A10000012F70000100000003 /* MCP */,
+				A10000012F70000100000004 /* JSONSchema */,
+				A10000012F70000100000007 /* Ontology */,
+			);
 			productName = Rhythm;
 			productReference = 6DE504742F639FCC00B1CAAF /* Rhythm.app */;
 			productType = "com.apple.product-type.application";
@@ -208,11 +208,11 @@
 			);
 			mainGroup = 6DE5046B2F639FCC00B1CAAF;
 			minimizedProjectReferenceProxies = 1;
-				packageReferences = (
-					A10000012F70000100000001 /* XCRemoteSwiftPackageReference "swift-sdk" */,
-					A10000012F70000100000002 /* XCRemoteSwiftPackageReference "JSONSchema" */,
-					A10000012F70000100000006 /* XCRemoteSwiftPackageReference "Ontology" */,
-				);
+			packageReferences = (
+				A10000012F70000100000001 /* XCRemoteSwiftPackageReference "swift-sdk" */,
+				A10000012F70000100000002 /* XCRemoteSwiftPackageReference "JSONSchema" */,
+				A10000012F70000100000006 /* XCRemoteSwiftPackageReference "Ontology" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 6DE504752F639FCC00B1CAAF /* Products */;
 			projectDirPath = "";
@@ -450,6 +450,7 @@
 				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Rhythm;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_LSMultipleInstancesProhibited = YES;
 				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Rhythm needs access to provide event information to the MCP server.";
@@ -492,6 +493,7 @@
 				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Rhythm;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_LSMultipleInstancesProhibited = YES;
 				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Rhythm needs access to provide event information to the MCP server.";

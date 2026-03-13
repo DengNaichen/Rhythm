@@ -2,54 +2,25 @@ import SwiftUI
 
 struct SettingView: View {
     @Environment(AppModel.self) private var appModel
-    @AppStorage(SettingsStorageKey.selectedSection)
-    private var selectedSectionRawValue = SettingsSection.general.storageValue
-
-    private var serviceConfigs: [ServiceConfig] {
-        appModel.visibleServiceConfigs
-    }
-
-    private var availableServiceIDs: Set<ServiceID> {
-        Set(serviceConfigs.map(\.id))
-    }
-
-    private var selectedSectionBinding: Binding<SettingsSection?> {
-        Binding(
-            get: { resolvedSelectedSection },
-            set: { newValue in
-                selectedSectionRawValue = (newValue ?? .general).storageValue
-            }
-        )
-    }
-
-    private var resolvedSelectedSection: SettingsSection {
-        let section = SettingsSection(storageValue: selectedSectionRawValue)
-
-        switch section {
-        case .service(let serviceID) where !availableServiceIDs.contains(serviceID):
-            return .general
-        default:
-            return section
-        }
-    }
+    @State private var selection: SettingsDestination? = .general
 
     var body: some View {
         NavigationSplitView {
-            List(selection: selectedSectionBinding) {
-                SettingsSidebarRow(title: "General", systemImage: "gear")
-                    .tag(SettingsSection.general)
+            List(selection: $selection) {
+                Label("General", systemImage: "gear")
+                    .tag(SettingsDestination.general)
 
-                if !serviceConfigs.isEmpty {
+                if !appModel.visibleServiceConfigs.isEmpty {
                     Section("Services") {
-                        ForEach(serviceConfigs) { config in
-                            SettingsSidebarRow(title: config.name, systemImage: config.iconName)
-                                .tag(SettingsSection.service(config.id))
+                        ForEach(appModel.visibleServiceConfigs) { config in
+                            Label(config.name, systemImage: config.iconName)
+                                .tag(SettingsDestination.service(config.id))
                         }
                     }
                 }
 
-                SettingsSidebarRow(title: "About", systemImage: "info.circle")
-                    .tag(SettingsSection.about)
+                Label("About", systemImage: "info.circle")
+                    .tag(SettingsDestination.about)
             }
             .listStyle(.sidebar)
             .navigationSplitViewColumnWidth(
@@ -57,43 +28,42 @@ struct SettingView: View {
                 ideal: SettingsMetrics.sidebarWidth
             )
         } detail: {
-            settingsDetailView(for: resolvedSelectedSection)
+            detailView(for: selection ?? .general)
         }
         .navigationSplitViewStyle(.balanced)
-        .task(id: serviceConfigs.map(\.id)) {
-            selectedSectionRawValue = resolvedSelectedSection.storageValue
-        }
     }
 
     @ViewBuilder
-    private func settingsDetailView(for section: SettingsSection) -> some View {
-        switch section {
+    private func detailView(for destination: SettingsDestination) -> some View {
+        switch destination {
         case .general:
             GeneralSettingView()
-        case .service(let serviceID):
-            switch serviceID {
-            case .calendar:
-                CalendarSettingView(service: appModel.calendarService)
-            case .hydration:
-                HydrationSettingView()
-            case .reminders:
-                ReminderSettingView()
-            case .things:
-                ThingsSettingView()
-            }
+        case let .service(serviceID):
+            serviceDetailView(for: serviceID)
         case .about:
             AboutView()
         }
     }
+
+    @ViewBuilder
+    private func serviceDetailView(for serviceID: ServiceID) -> some View {
+        switch serviceID {
+        case .calendar:
+            CalendarSettingView(service: appModel.calendarService)
+        case .hydration:
+            HydrationSettingView()
+        case .reminders:
+            ReminderSettingView()
+        case .things:
+            ThingsSettingView()
+        }
+    }
 }
 
-private struct SettingsSidebarRow: View {
-    let title: String
-    let systemImage: String
-
-    var body: some View {
-        Label(title, systemImage: systemImage)
-    }
+private enum SettingsDestination: Hashable {
+    case general
+    case service(ServiceID)
+    case about
 }
 
 #Preview {

@@ -3,6 +3,8 @@ import SwiftUI
 struct CalendarSettingView: View {
     @Environment(AppModel.self) private var appModel
     @State private var viewModel: CalendarSettingViewModel
+    @State private var isServiceActivated = false
+    @State private var isActivating = false
 
     init(service: CalendarToolService) {
         _viewModel = State(initialValue: CalendarSettingViewModel(service: service))
@@ -13,10 +15,12 @@ struct CalendarSettingView: View {
             if let config = appModel.serviceConfig(for: .calendar) {
                 Form {
                     Section {
-                        ServiceToggleView(config: config) {
-                            Task {
-                                await viewModel.load()
-                            }
+                        Toggle("Enable \(config.name)", isOn: serviceToggleBinding)
+                            .disabled(isActivating)
+
+                        LabeledContent("Status") {
+                            Text(statusText)
+                                .foregroundStyle(.secondary)
                         }
                     } header: {
                         Text("Access")
@@ -26,7 +30,23 @@ struct CalendarSettingView: View {
 
                     Section {
                         ForEach(viewModel.tools) { tool in
-                            ServiceToolRow(tool: tool)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(tool.title)
+                                    .font(.body.weight(.medium))
+
+                                Text(tool.description)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+
+                                Text(toolSummary(for: tool))
+                                    .font(.caption2)
+                                    .foregroundStyle(.tertiary)
+
+                                Text(verbatim: tool.name)
+                                    .font(.system(.caption2, design: .monospaced))
+                                    .foregroundStyle(.tertiary)
+                            }
+                            .padding(.vertical, 2)
                         }
                     } header: {
                         Text("Available Tools")
@@ -87,6 +107,10 @@ struct CalendarSettingView: View {
                 .formStyle(.grouped)
                 .navigationTitle("Calendar")
                 .task {
+                    isServiceActivated = await appModel.refreshActivationState(
+                        for: .calendar,
+                        syncEnabledState: true
+                    )
                     await viewModel.load()
                 }
                 .alert(
@@ -115,6 +139,83 @@ struct CalendarSettingView: View {
                 }
             }
         )
+    }
+
+    private var statusText: String {
+        if isActivating {
+            return "Requesting Access"
+        }
+
+        if viewModel.isLoadingEvents {
+            return "Loading Events"
+        }
+
+        if !isServiceActivated {
+            return "Needs Access"
+        }
+
+        return appModel.isServiceEnabled(.calendar) ? "Ready" : "Inactive"
+    }
+
+    private var serviceToggleBinding: Binding<Bool> {
+        Binding(
+            get: { appModel.isServiceEnabled(.calendar) && isServiceActivated },
+            set: { newValue in
+                guard newValue else {
+                    Task {
+                        await appModel.setServiceEnabled(false, for: .calendar)
+                        await viewModel.load()
+                    }
+                    return
+                }
+
+                guard !isActivating else {
+                    return
+                }
+
+                guard !isServiceActivated else {
+                    Task {
+                        await appModel.setServiceEnabled(true, for: .calendar)
+                        await viewModel.load()
+                    }
+                    return
+                }
+
+                isActivating = true
+
+                Task {
+                    let activated = await appModel.activateService(.calendar)
+
+                    await MainActor.run {
+                        isActivating = false
+                        isServiceActivated = activated
+                    }
+
+                    await appModel.setServiceEnabled(activated, for: .calendar)
+                    await viewModel.load()
+                }
+            }
+        )
+    }
+
+    private func toolSummary(for tool: Tool) -> String {
+        var values: [String] = []
+
+        if tool.annotations.readOnlyHint == true {
+            values.append("Read Only")
+        } else {
+            values.append("Action")
+        }
+
+        if tool.annotations.destructiveHint == true {
+            values.append("Destructive")
+        }
+
+        if tool.annotations.idempotentHint == true {
+            values.append("Repeatable")
+        }
+
+        return values.joined(separator: " • ")
     }
 }
 
