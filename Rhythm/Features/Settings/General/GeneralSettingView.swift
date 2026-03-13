@@ -16,36 +16,28 @@ struct GeneralSettingView: View {
             Section {
                 Toggle("Allow Claude Desktop", isOn: allowClaudeBinding)
                 Toggle("Allow OpenClaw", isOn: allowOpenClawBinding)
-                Toggle("Allow Others", isOn: allowUnknownClientsBinding)
+                Toggle("Allow Other MCP Clients", isOn: allowUnknownClientsBinding)
             } header: {
                 Text("Client Access")
             } footer: {
-                Text("Enable desktop clients to connect to Rhythm. Other clients stay blocked by default.")
+                Text(
+                    "Rhythm accepts connections from the desktop clients enabled here. Other clients stay blocked unless you explicitly allow them."
+                )
             }
 
             Section {
-                LabeledContent("Claude Desktop") {
-                    Button("Configure...") {
-                        guard ClaudeDesktop.showConfigurationPanel() else {
-                            return
-                        }
-
-                        Task {
-                            await appModel.setKnownClient(.claudeDesktop, allowed: true)
-                        }
-                    }
-                }
                 LabeledContent("OpenClaw") {
                     Button("Configure...") {
-                        guard OpenClaw.showConfigurationPanel() else {
-                            return
-                        }
-
-                        Task {
-                            await appModel.setKnownClient(.openClaw, allowed: true)
-                        }
+                        OpenClaw.showConfigurationPanel()
                     }
                 }
+
+                LabeledContent("Claude Desktop") {
+                    Button("Configure...") {
+                        ClaudeDesktop.showConfigurationPanel()
+                    }
+                }
+
                 LabeledContent("Server Command") {
                     HStack(spacing: 8) {
                         Text(verbatim: appModel.serverCommand)
@@ -65,16 +57,7 @@ struct GeneralSettingView: View {
             } header: {
                 Text("Integrations")
             } footer: {
-                Text("Write MCP settings for supported desktop clients, or copy the bundled command path for manual setup.")
-            }
-
-            Section {
-                Toggle("Enable MCP Server", isOn: serverEnabledBinding)
-
-                LabeledContent("Server Status") {
-                    Text(appModel.serverStatus.rawValue.capitalized)
-                        .foregroundStyle(.secondary)
-                }
+                Text("Write MCP settings for supported desktop clients.")
             }
         }
         .formStyle(.grouped)
@@ -110,17 +93,6 @@ struct GeneralSettingView: View {
             set: { allowed in
                 Task {
                     await appModel.setAllowUnknownClients(allowed)
-                }
-            }
-        )
-    }
-
-    private var serverEnabledBinding: Binding<Bool> {
-        Binding(
-            get: { appModel.isServerEnabled },
-            set: { enabled in
-                Task {
-                    await appModel.setServerEnabled(enabled)
                 }
             }
         )

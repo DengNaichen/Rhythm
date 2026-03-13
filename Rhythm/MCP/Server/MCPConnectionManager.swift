@@ -81,7 +81,7 @@ final class MCPConnectionManager {
                 return
             }
 
-            while await self.parentManager?.isRunning() == true {
+            while self.parentManager?.isRunning() == true {
                 switch self.connection.state {
                 case .ready, .setup, .preparing, .waiting:
                     break

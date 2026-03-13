@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct CalendarSettingView: View {
+    @Environment(AppModel.self) private var appModel
     @State private var viewModel: CalendarSettingViewModel
 
     init(service: CalendarToolService) {
@@ -8,105 +9,101 @@ struct CalendarSettingView: View {
     }
 
     var body: some View {
-        Form {
-            Section {
-                Toggle("Calendar Access", isOn: calendarAccessBinding)
-                    .disabled(viewModel.isWorking)
-
-                LabeledContent("Status") {
-                    Text(viewModel.statusText)
-                        .foregroundStyle(.secondary)
-                }
-            } header: {
-                Text("Service Status")
-            } footer: {
-                Text("Enable this to allow Rhythm to use your system calendars.")
-            }
-
-            Section {
-                ForEach(viewModel.tools) { tool in
-                    Label(tool.title, systemImage: tool.systemImage)
-                }
-            } header: {
-                Text("Available Tools")
-            } footer: {
-                Text("These tools are defined by the calendar integration.")
-            }
-
-            if viewModel.isServiceEnabled {
-                Section {
-                    Button("Refresh Events") {
-                        viewModel.refreshEvents()
-                    }
-                    .disabled(viewModel.isWorking || viewModel.isLoadingEvents)
-
-                    if viewModel.isLoadingEvents {
-                        HStack {
-                            Spacer()
-                            ProgressView("Loading Events...")
-                            Spacer()
+        Group {
+            if let config = appModel.serviceConfig(for: .calendar) {
+                Form {
+                    Section {
+                        ServiceToggleView(config: config) {
+                            Task {
+                                await viewModel.load()
+                            }
                         }
-                    } else if viewModel.events.isEmpty {
-                        Text("No events scheduled in the next 7 days.")
-                            .foregroundStyle(.secondary)
-                    } else {
-                        ForEach(viewModel.events) { event in
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(event.title)
-                                    .font(.body.weight(.medium))
+                    } header: {
+                        Text("Access")
+                    } footer: {
+                        Text("Turn this integration on to expose its tools to connected clients.")
+                    }
 
-                                Text(viewModel.dayText(for: event))
-                                    .font(.caption)
+                    Section {
+                        ForEach(viewModel.tools) { tool in
+                            ServiceToolRow(tool: tool)
+                        }
+                    } header: {
+                        Text("Available Tools")
+                    } footer: {
+                        Text("These tools become available when Calendar is enabled.")
+                    }
+
+                    if appModel.isServiceEnabled(.calendar) && viewModel.isServiceEnabled {
+                        Section {
+                            Button("Refresh Events") {
+                                viewModel.refreshEvents()
+                            }
+                            .disabled(viewModel.isWorking || viewModel.isLoadingEvents)
+
+                            if viewModel.isLoadingEvents {
+                                HStack {
+                                    Spacer()
+                                    ProgressView("Loading Events...")
+                                    Spacer()
+                                }
+                            } else if viewModel.events.isEmpty {
+                                Text("No events scheduled in the next 7 days.")
                                     .foregroundStyle(.secondary)
+                            } else {
+                                ForEach(viewModel.events) { event in
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(event.title)
+                                            .font(.body.weight(.medium))
 
-                                Text(viewModel.timeText(for: event))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                        Text(viewModel.dayText(for: event))
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
 
-                                Text(event.listTitle)
-                                    .font(.caption2)
-                                    .foregroundStyle(.tertiary)
+                                        Text(viewModel.timeText(for: event))
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
 
-                                if let location = event.location {
-                                    Text(location)
-                                        .font(.caption2)
-                                        .foregroundStyle(.tertiary)
+                                        Text(event.listTitle)
+                                            .font(.caption2)
+                                            .foregroundStyle(.tertiary)
+
+                                        if let location = event.location {
+                                            Text(location)
+                                                .font(.caption2)
+                                                .foregroundStyle(.tertiary)
+                                        }
+                                    }
+                                    .padding(.vertical, 2)
                                 }
                             }
-                            .padding(.vertical, 2)
+                        } header: {
+                            Text("Upcoming Events")
+                        } footer: {
+                            Text("Showing events from the next 7 days.")
                         }
                     }
-                } header: {
-                    Text("Upcoming Events")
-                } footer: {
-                    Text("Showing events from the next 7 days.")
                 }
+                .formStyle(.grouped)
+                .navigationTitle("Calendar")
+                .task {
+                    await viewModel.load()
+                }
+                .alert(
+                    "Calendar Access Failed",
+                    isPresented: errorAlertBinding
+                ) {
+                    Button("OK") {
+                        viewModel.clearError()
+                    }
+                } message: {
+                    Text(viewModel.errorMessage ?? "")
+                }
+            } else {
+                Text("Calendar service unavailable.")
+                    .foregroundStyle(.secondary)
             }
         }
-        .formStyle(.grouped)
-        .navigationTitle("Calendar")
-        .task {
-            await viewModel.load()
-        }
-        .alert(
-            "Calendar Access Failed",
-            isPresented: errorAlertBinding
-        ) {
-            Button("OK") {
-                viewModel.clearError()
-            }
-        } message: {
-            Text(viewModel.errorMessage ?? "")
-        }
-    }
-
-    private var calendarAccessBinding: Binding<Bool> {
-        Binding(
-            get: { viewModel.isServiceEnabled },
-            set: { newValue in
-                viewModel.setServiceEnabled(newValue)
-            }
-        )
     }
 
     private var errorAlertBinding: Binding<Bool> {
@@ -122,7 +119,10 @@ struct CalendarSettingView: View {
 }
 
 #Preview {
+    let appModel = AppModel(autoStart: false)
+
     NavigationStack {
         CalendarSettingView(service: CalendarToolService())
     }
+    .environment(appModel)
 }

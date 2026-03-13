@@ -1,6 +1,7 @@
 import Foundation
 import JSONSchema
 import MCP
+import Ontology
 
 struct Tool: Identifiable {
     let name: String
@@ -40,7 +41,11 @@ struct Tool: Identifiable {
         )
         self.implementation = { input in
             let result = try await implementation(input)
-            let data = try JSONEncoder().encode(result)
+            let encoder = JSONEncoder()
+            encoder.userInfo[Ontology.DateTime.timeZoneOverrideKey] = TimeZone.current
+            encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+
+            let data = try encoder.encode(result)
             return try JSONDecoder().decode(Value.self, from: data)
         }
     }

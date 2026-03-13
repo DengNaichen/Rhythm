@@ -1,5 +1,7 @@
 import Foundation
 import Observation
+import OSLog
+import SwiftUI
 
 @MainActor
 @Observable
@@ -17,37 +19,78 @@ final class AppModel {
     }
 
     let calendarService: CalendarToolService
+    let hydrationService: HydrationToolService
     let remindersService: RemindersToolService
     let thingsService: ThingsToolService
 
     private(set) var serverStatus: ServerStatus = .starting
     private(set) var isServerEnabled: Bool
+    private(set) var visibleServiceConfigs: [ServiceConfig]
     private(set) var clientAccessPolicy: ClientAccessPolicy
 
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let runtime: any ServerRuntime
 
-    private var enabledServiceIDs: Set<String>
+    private var serviceEnabledStates: [ServiceID: Bool]
 
-    init(defaults: UserDefaults = .standard) {
+    var hasEnabledServices: Bool {
+        serviceEnabledStates.values.contains(true)
+    }
+
+    init(
+        defaults: UserDefaults = .standard,
+        autoStart: Bool = true
+    ) {
         self.defaults = defaults
         self.calendarService = CalendarToolService()
+        self.hydrationService = HydrationToolService()
         self.remindersService = RemindersToolService()
         self.thingsService = ThingsToolService()
-        self.isServerEnabled = Self.loadServerEnabled(from: defaults)
-        self.enabledServiceIDs = Self.loadEnabledServiceIDs(from: defaults)
-        self.clientAccessPolicy = Self.loadClientAccessPolicy(from: defaults)
 
-        let services: [any Service] = [
-            calendarService,
-            remindersService,
-            thingsService,
+        let serviceConfigs = [
+            ServiceConfig(
+                id: .calendar,
+                name: "Calendar",
+                iconName: "calendar",
+                color: .red,
+                service: calendarService
+            ),
+            ServiceConfig(
+                id: .hydration,
+                name: "Hydration",
+                iconName: "drop.fill",
+                color: .blue,
+                service: hydrationService
+            ),
+            ServiceConfig(
+                id: .reminders,
+                name: "Reminders",
+                iconName: "list.bullet",
+                color: .orange,
+                service: remindersService
+            ),
+            ServiceConfig(
+                id: .things,
+                name: "Things",
+                iconName: "checklist.checked",
+                color: .teal,
+                service: thingsService
+            ),
         ]
 
-        self.runtime = ServerNetworkManager(services: services)
+        self.visibleServiceConfigs = serviceConfigs
+        self.serviceEnabledStates = Self.loadServiceStates(
+            from: defaults,
+            serviceConfigs: serviceConfigs
+        )
+        self.clientAccessPolicy = Self.loadClientAccessPolicy(from: defaults)
+        self.isServerEnabled = Self.loadServerEnabled(from: defaults)
+        self.runtime = ServerNetworkManager(services: serviceConfigs.map(\.service))
 
-        Task {
-            await bootstrap()
+        if autoStart {
+            Task {
+                await bootstrap()
+            }
         }
     }
 
@@ -57,19 +100,23 @@ final class AppModel {
             .path
     }
 
-    func isServiceEnabled(_ service: any Service) -> Bool {
-        enabledServiceIDs.contains(service.id)
+    func serviceConfig(for serviceID: ServiceID) -> ServiceConfig? {
+        visibleServiceConfigs.first(where: { $0.id == serviceID })
     }
 
-    func setServiceEnabled(_ enabled: Bool, for service: any Service) async {
-        if enabled {
-            enabledServiceIDs.insert(service.id)
-        } else {
-            enabledServiceIDs.remove(service.id)
+    func isServiceEnabled(_ serviceID: ServiceID) -> Bool {
+        serviceEnabledStates[serviceID] ?? false
+    }
+
+    func setServiceEnabled(_ enabled: Bool, for serviceID: ServiceID) async {
+        guard serviceEnabledStates.keys.contains(serviceID) else {
+            return
         }
 
-        defaults.set(Array(enabledServiceIDs).sorted(), forKey: StorageKey.enabledServices)
-        await runtime.setEnabledServices(enabledServiceIDs)
+        serviceEnabledStates[serviceID] = enabled
+        defaults.set(enabled, forKey: serviceID.storageKey)
+        defaults.set(Array(currentEnabledServiceIDs).sorted(), forKey: StorageKey.enabledServices)
+        await runtime.setEnabledServices(currentEnabledServiceIDs)
     }
 
     func setKnownClient(_ client: KnownClient, allowed: Bool) async {
@@ -84,6 +131,39 @@ final class AppModel {
         await runtime.setClientAccessPolicy(clientAccessPolicy)
     }
 
+    func activateService(_ serviceID: ServiceID) async -> Bool {
+        guard let service = service(for: serviceID) else {
+            return false
+        }
+
+        if await service.isActivated() {
+            return true
+        }
+
+        do {
+            try await service.activate()
+        } catch {
+            Logger.server.error(
+                "Failed to activate service \(serviceID.rawValue): \(error.localizedDescription)"
+            )
+        }
+
+        return await service.isActivated()
+    }
+
+    func refreshActivationState(for serviceID: ServiceID, syncEnabledState: Bool) async -> Bool {
+        guard let service = service(for: serviceID) else {
+            return false
+        }
+
+        let activated = await service.isActivated()
+        if syncEnabledState && !activated {
+            await setServiceEnabled(false, for: serviceID)
+        }
+
+        return activated
+    }
+
     func setServerEnabled(_ enabled: Bool) async {
         isServerEnabled = enabled
         defaults.set(enabled, forKey: StorageKey.serverEnabled)
@@ -92,11 +172,32 @@ final class AppModel {
     }
 
     private func bootstrap() async {
+        await reconcileActivationStates()
         await runtime.setClientAccessPolicy(clientAccessPolicy)
-        await runtime.setEnabledServices(enabledServiceIDs)
+        await runtime.setEnabledServices(currentEnabledServiceIDs)
         await runtime.setEnabled(isServerEnabled)
         await runtime.start()
         serverStatus = isServerEnabled ? .running : .disabled
+    }
+
+    private func reconcileActivationStates() async {
+        for config in visibleServiceConfigs where isServiceEnabled(config.id) {
+            let activated = await config.service.isActivated()
+            if !activated {
+                serviceEnabledStates[config.id] = false
+                defaults.set(false, forKey: config.id.storageKey)
+            }
+        }
+
+        defaults.set(Array(currentEnabledServiceIDs).sorted(), forKey: StorageKey.enabledServices)
+    }
+
+    private var currentEnabledServiceIDs: Set<String> {
+        Set(serviceEnabledStates.compactMap { $0.value ? $0.key.rawValue : nil })
+    }
+
+    private func service(for serviceID: ServiceID) -> (any Service)? {
+        serviceConfig(for: serviceID)?.service
     }
 
     private static func loadServerEnabled(from defaults: UserDefaults) -> Bool {
@@ -107,24 +208,32 @@ final class AppModel {
         return defaults.bool(forKey: StorageKey.serverEnabled)
     }
 
-    private static func loadEnabledServiceIDs(from defaults: UserDefaults) -> Set<String> {
-        let savedIDs = defaults.stringArray(forKey: StorageKey.enabledServices) ?? [
-            "calendar",
-            "reminders",
-            "things",
-        ]
-        return Set(savedIDs)
+    private static func loadServiceStates(
+        from defaults: UserDefaults,
+        serviceConfigs: [ServiceConfig]
+    ) -> [ServiceID: Bool] {
+        let legacyEnabledServiceIDs = Set(defaults.stringArray(forKey: StorageKey.enabledServices) ?? [])
+
+        return Dictionary(uniqueKeysWithValues: serviceConfigs.map { config in
+            let value: Bool
+            if defaults.object(forKey: config.id.storageKey) != nil {
+                value = defaults.bool(forKey: config.id.storageKey)
+            } else {
+                value = legacyEnabledServiceIDs.contains(config.id.rawValue)
+            }
+            return (config.id, value)
+        })
     }
 
     private static func loadClientAccessPolicy(from defaults: UserDefaults) -> ClientAccessPolicy {
         let knownClients = Dictionary(uniqueKeysWithValues: KnownClient.allCases.map { client in
-            let allowed: Bool
+            let value: Bool
             if defaults.object(forKey: client.storageKey) != nil {
-                allowed = defaults.bool(forKey: client.storageKey)
+                value = defaults.bool(forKey: client.storageKey)
             } else {
-                allowed = client.defaultValue
+                value = client.defaultValue
             }
-            return (client, allowed)
+            return (client, value)
         })
 
         let allowUnknownClients: Bool

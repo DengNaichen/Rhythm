@@ -2,34 +2,42 @@ import SwiftUI
 
 struct ReminderSettingView: View {
     @Environment(AppModel.self) private var appModel
-    @State private var isReminderEnabled = true
 
     var body: some View {
-        Form {
-            Section {
-                Toggle("Reminder Access", isOn: $isReminderEnabled)
-            } header: {
-                Text("Service Status")
-            } footer: {
-                Text("Enable this to allow Rhythm to use your system reminders.")
-            }
+        Group {
+            if let config = appModel.serviceConfig(for: .reminders) {
+                Form {
+                    Section {
+                        ServiceToggleView(config: config)
+                    } header: {
+                        Text("Access")
+                    } footer: {
+                        Text("Turn this integration on to expose its tools to connected clients.")
+                    }
 
-            Section {
-                ForEach(appModel.remindersService.tools()) { tool in
-                    Label(tool.title, systemImage: tool.systemImage)
+                    Section {
+                        ForEach(appModel.remindersService.tools()) { tool in
+                            ServiceToolRow(tool: tool)
+                        }
+                    } header: {
+                        Text("Available Tools")
+                    } footer: {
+                        Text("These tools become available when Reminders is enabled.")
+                    }
                 }
-            } header: {
-                Text("Available Tools")
-            } footer: {
-                Text("These tools are exposed by the reminders MCP service.")
+                .formStyle(.grouped)
+                .navigationTitle("Reminders")
+            } else {
+                Text("Reminders service unavailable.")
+                    .foregroundStyle(.secondary)
             }
         }
-        .formStyle(.grouped)
-        .navigationTitle("Reminders")
     }
 }
 
 #Preview {
+    let appModel = AppModel(autoStart: false)
+
     ReminderSettingView()
-        .environment(AppModel())
+        .environment(appModel)
 }

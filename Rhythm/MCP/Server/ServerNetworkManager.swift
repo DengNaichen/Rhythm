@@ -1,5 +1,6 @@
 import MCP
 import Network
+import Ontology
 import OSLog
 
 private let serviceType = "_mcp._tcp"
@@ -321,11 +322,11 @@ final class ServerNetworkManager: ServerRuntime {
             }
         }
 
-        if let stringValue = value.stringValue {
-            return [.text(stringValue)]
-        }
+        let encoder = JSONEncoder()
+        encoder.userInfo[Ontology.DateTime.timeZoneOverrideKey] = TimeZone.current
+        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
 
-        let data = try JSONEncoder().encode(value)
+        let data = try encoder.encode(value)
         let text = String(data: data, encoding: .utf8) ?? "{}"
         return [.text(text)]
     }

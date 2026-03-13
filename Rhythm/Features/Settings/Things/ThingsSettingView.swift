@@ -2,34 +2,42 @@ import SwiftUI
 
 struct ThingsSettingView: View {
     @Environment(AppModel.self) private var appModel
-    @State private var isThingsEnabled = true
 
     var body: some View {
-        Form {
-            Section {
-                Toggle("Things Access", isOn: $isThingsEnabled)
-            } header: {
-                Text("Service Status")
-            } footer: {
-                Text("Enable this to allow Rhythm to use your Things database and URL actions.")
-            }
+        Group {
+            if let config = appModel.serviceConfig(for: .things) {
+                Form {
+                    Section {
+                        ServiceToggleView(config: config)
+                    } header: {
+                        Text("Access")
+                    } footer: {
+                        Text("Turn this integration on to expose its tools to connected clients.")
+                    }
 
-            Section {
-                ForEach(appModel.thingsService.tools()) { tool in
-                    Label(tool.title, systemImage: tool.systemImage)
+                    Section {
+                        ForEach(appModel.thingsService.tools()) { tool in
+                            ServiceToolRow(tool: tool)
+                        }
+                    } header: {
+                        Text("Available Tools")
+                    } footer: {
+                        Text("These tools become available when Things is enabled.")
+                    }
                 }
-            } header: {
-                Text("Available Tools")
-            } footer: {
-                Text("These tools are exposed by the Things MCP service.")
+                .formStyle(.grouped)
+                .navigationTitle("Things")
+            } else {
+                Text("Things service unavailable.")
+                    .foregroundStyle(.secondary)
             }
         }
-        .formStyle(.grouped)
-        .navigationTitle("Things")
     }
 }
 
 #Preview {
+    let appModel = AppModel(autoStart: false)
+
     ThingsSettingView()
-        .environment(AppModel())
+        .environment(appModel)
 }

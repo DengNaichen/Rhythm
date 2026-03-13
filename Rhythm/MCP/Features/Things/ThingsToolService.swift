@@ -1,14 +1,17 @@
 import AppKit
 import Foundation
 import JSONSchema
+import OSLog
 import OrderedCollections
+import UniformTypeIdentifiers
 
+private let thingsLog = Logger.service("things")
 private let thingsGroupContainerPath =
     "/Users/\(NSUserName())/Library/Group Containers/JLMPQHK86H.com.culturedcode.ThingsMac"
-private let thingsDatabaseBookmarkKey = "things.databaseBookmark"
+private let thingsDatabaseBookmarkKey = BookmarkStorageKey.thingsDatabase
 
 @MainActor
-final class ThingsToolService: Service, ThingsDatabaseAccessing {
+final class ThingsToolService: NSObject, Service, NSOpenSavePanelDelegate, ThingsDatabaseAccessing {
     let id = "things"
     let displayName = "Things"
 
@@ -22,6 +25,7 @@ final class ThingsToolService: Service, ThingsDatabaseAccessing {
     ) {
         self.urlBuilder = urlBuilder
         self.urlExecutor = urlExecutor
+        super.init()
     }
 
     func tools() -> [Tool] {
@@ -246,9 +250,17 @@ final class ThingsToolService: Service, ThingsDatabaseAccessing {
     }
 
     func activate() async throws {
-        guard canAccessDatabaseAtDefaultPath || canAccessDatabaseUsingBookmark else {
-            throw ThingsToolServiceError.databaseAccessRequired
+        if canAccessDatabaseAtDefaultPath || canAccessDatabaseUsingBookmark {
+            return
         }
+
+        guard showDatabaseAccessAlert() else {
+            throw ThingsToolServiceError.userDeclinedAccess
+        }
+
+        let selectedURL = try showFilePicker()
+        _ = try validateSelection(selectedURL)
+        storeBookmark(for: selectedURL)
     }
 
     func withReadableDatabaseURL<T>(_ operation: (URL) throws -> T) throws -> T {
@@ -470,7 +482,7 @@ final class ThingsToolService: Service, ThingsDatabaseAccessing {
 
     private func withSecurityScopedAccess<T>(_ url: URL, _ operation: (URL) throws -> T) throws -> T {
         guard url.startAccessingSecurityScopedResource() else {
-            throw ThingsToolServiceError.databaseAccessRequired
+            throw ThingsToolServiceError.securityScopeAccessFailed
         }
         defer { url.stopAccessingSecurityScopedResource() }
         return try operation(url)
@@ -482,12 +494,18 @@ final class ThingsToolService: Service, ThingsDatabaseAccessing {
         }
 
         var isStale = false
-        return try URL(
+        let url = try URL(
             resolvingBookmarkData: bookmarkData,
             options: .withSecurityScope,
             relativeTo: nil,
             bookmarkDataIsStale: &isStale
         )
+
+        if isStale {
+            storeBookmark(for: url)
+        }
+
+        return url
     }
 
     private func resolveDatabaseURL(from selectionURL: URL) throws -> URL {
@@ -516,12 +534,84 @@ final class ThingsToolService: Service, ThingsDatabaseAccessing {
             }
         }
 
-        throw ThingsToolServiceError.databaseAccessRequired
+        throw ThingsToolServiceError.invalidSelection
+    }
+
+    private func validateSelection(_ url: URL) throws -> URL {
+        let databaseURL = try resolveDatabaseURL(from: url)
+        guard FileManager.default.isReadableFile(atPath: databaseURL.path) else {
+            throw ThingsToolServiceError.databaseNotReadable
+        }
+        return databaseURL
+    }
+
+    private func showDatabaseAccessAlert() -> Bool {
+        let alert = NSAlert()
+        alert.messageText = "Things Database Access Required"
+        alert.informativeText = """
+            To read your Things data, Rhythm needs access to the Things database.
+
+            In the next screen, select either:
+            • the folder `JLMPQHK86H.com.culturedcode.ThingsMac`
+            • the package `Things Database.thingsdatabase`
+            • or the file `main.sqlite`
+            """
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "Continue")
+        alert.addButton(withTitle: "Cancel")
+
+        return alert.runModal() == .alertFirstButtonReturn
+    }
+
+    private func showFilePicker() throws -> URL {
+        let openPanel = NSOpenPanel()
+        openPanel.delegate = self
+        openPanel.message = "Select the Things database folder, package, or main.sqlite file"
+        openPanel.prompt = "Grant Access"
+        openPanel.allowedContentTypes = [UTType.item]
+        openPanel.directoryURL = URL(fileURLWithPath: thingsGroupContainerPath)
+            .deletingLastPathComponent()
+        openPanel.allowsMultipleSelection = false
+        openPanel.canChooseDirectories = true
+        openPanel.canChooseFiles = true
+        openPanel.showsHiddenFiles = true
+        openPanel.resolvesAliases = true
+
+        guard openPanel.runModal() == .OK, let url = openPanel.url else {
+            throw ThingsToolServiceError.invalidSelection
+        }
+
+        return url
+    }
+
+    private func storeBookmark(for url: URL) {
+        do {
+            let bookmarkData = try url.bookmarkData(
+                options: .securityScopeAllowOnlyReadAccess,
+                includingResourceValuesForKeys: nil,
+                relativeTo: nil
+            )
+            UserDefaults.standard.set(bookmarkData, forKey: thingsDatabaseBookmarkKey)
+        } catch {
+            thingsLog.error("Failed to create Things bookmark: \(error.localizedDescription)")
+        }
+    }
+
+    func panel(_ sender: Any, shouldEnable url: URL) -> Bool {
+        if url.hasDirectoryPath {
+            return true
+        }
+
+        return url.lastPathComponent == "main.sqlite"
     }
 }
 
 enum ThingsToolServiceError: Error, LocalizedError {
     case databaseAccessRequired
+    case securityScopeAccessFailed
+    case userDeclinedAccess
+    case invalidSelection
+    case databaseNotReadable
     case listFiltersRequireListTarget
     case missingAuthToken
     case missingRequiredArgument(String)
@@ -531,6 +621,14 @@ enum ThingsToolServiceError: Error, LocalizedError {
         switch self {
         case .databaseAccessRequired:
             return "Things database access is required."
+        case .securityScopeAccessFailed:
+            return "Failed to access the selected Things database location."
+        case .userDeclinedAccess:
+            return "User declined to grant access to the Things database."
+        case .invalidSelection:
+            return "Invalid Things database selection."
+        case .databaseNotReadable:
+            return "The selected Things database is not readable."
         case .listFiltersRequireListTarget:
             return "query and filter_tags can only be used with list targets"
         case .missingAuthToken:
