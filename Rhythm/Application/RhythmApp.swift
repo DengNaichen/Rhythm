@@ -10,6 +10,8 @@ import SwiftData
 
 @main
 struct RhythmApp: App {
+    @State private var appModel = AppModel()
+
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
             Item.self,
@@ -25,7 +27,8 @@ struct RhythmApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            SettingView()
+                .environment(appModel)
         }
         .modelContainer(sharedModelContainer)
     }
