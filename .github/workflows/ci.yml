@@ -13,15 +13,15 @@ permissions:
 jobs:
   build:
     name: Build macOS app
-    runs-on: macos-latest
+    runs-on: macos-26
     timeout-minutes: 15
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
       - name: Cache Xcode build artifacts
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
             ~/Library/Developer/Xcode/DerivedData
@@ -32,6 +32,24 @@ jobs:
 
       - name: Show Xcode version
         run: xcodebuild -version
+
+      - name: Lint GitHub Actions
+        env:
+          GOTOOLCHAIN: local
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+
+      - name: Validate release tooling
+        shell: zsh {0}
+        run: |
+          test -x Scripts/release.sh
+          test -x Scripts/bump-version.sh
+          test -x Scripts/setup-notarytool-profile.sh
+          test -x Scripts/publish-github-release.sh
+          zsh -n Scripts/release.sh
+          zsh -n Scripts/bump-version.sh
+          zsh -n Scripts/setup-notarytool-profile.sh
+          zsh -n Scripts/publish-github-release.sh
+          ruby -e 'require "yaml"; ARGV.each { |path| YAML.parse_file(path) }' .github/workflows/*.yml
 
       - name: Lint formatting
         shell: bash
@@ -48,6 +66,7 @@ jobs:
             -project Rhythm.xcodeproj \
             -scheme Rhythm \
             -configuration Debug \
+            -onlyUsePackageVersionsFromResolvedFile \
             -destination "platform=macOS" \
             CODE_SIGNING_ALLOWED=NO \
             SWIFT_VERSION=5 \
@@ -60,6 +79,7 @@ jobs:
             -project Rhythm.xcodeproj \
             -scheme Rhythm \
             -configuration Debug \
+            -onlyUsePackageVersionsFromResolvedFile \
             -destination "platform=macOS" \
             CODE_SIGNING_ALLOWED=NO \
             SWIFT_VERSION=5 \

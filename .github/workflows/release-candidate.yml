@@ -1,13 +1,10 @@
-name: macOS Release
+name: macOS Release Candidate
 
 on:
-  push:
-    tags:
-      - "v*"
   workflow_dispatch:
     inputs:
       release_tag:
-        description: Draft release label, for example v1.1.0-rc1
+        description: Candidate label, for example v1.1.0-rc1
         required: true
         type: string
 
@@ -15,26 +12,24 @@ permissions:
   contents: read
 
 concurrency:
-  group: rhythm-production-release
+  group: rhythm-release-candidate-${{ inputs.release_tag }}
   cancel-in-progress: false
 
 jobs:
   preflight:
-    name: Validate release source
+    name: Validate candidate source
     runs-on: macos-26
     timeout-minutes: 30
     outputs:
       commit_sha: ${{ steps.metadata.outputs.commit_sha }}
       release_tag: ${{ steps.metadata.outputs.release_tag }}
-      release_mode: ${{ steps.metadata.outputs.release_mode }}
-      verify_tag: ${{ steps.metadata.outputs.verify_tag }}
       xcode_build: ${{ steps.metadata.outputs.xcode_build }}
 
     steps:
-      - name: Checkout release source
+      - name: Checkout candidate source
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && 'main' || github.ref }}
+          ref: main
           fetch-depth: 0
           persist-credentials: false
 
@@ -42,39 +37,19 @@ jobs:
         id: metadata
         shell: bash
         env:
-          EVENT_NAME: ${{ github.event_name }}
-          EVENT_REF_NAME: ${{ github.ref_name }}
           INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
           set -euo pipefail
           commit_sha="$(git rev-parse HEAD)"
           main_sha="$(git rev-parse refs/remotes/origin/main)"
+          release_tag="${INPUT_RELEASE_TAG}"
           if [[ "${commit_sha}" != "${main_sha}" ]]; then
-            echo "Release source must be the current origin/main commit." >&2
+            echo "Release candidate source must be the current origin/main commit." >&2
             exit 1
           fi
-
-          if [[ "${EVENT_NAME}" == "workflow_dispatch" ]]; then
-            release_tag="${INPUT_RELEASE_TAG}"
-            release_mode=draft
-            verify_tag=false
-            if [[ ! "${release_tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-rc[0-9]+$ ]]; then
-              echo "Manual production tests require vMAJOR.MINOR.PATCH-rcN." >&2
-              exit 1
-            fi
-          else
-            release_tag="${EVENT_REF_NAME}"
-            release_mode=formal
-            verify_tag=true
-            if [[ ! "${release_tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc[0-9]+)?$ ]]; then
-              echo "Release tag must match vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH-rcN." >&2
-              exit 1
-            fi
-            tag_sha="$(git rev-list -n 1 "${release_tag}")"
-            if [[ "${tag_sha}" != "${commit_sha}" ]]; then
-              echo "Checked-out commit does not match ${release_tag}." >&2
-              exit 1
-            fi
+          if [[ ! "${release_tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-rc[0-9]+$ ]]; then
+            echo "Candidate tag must match vMAJOR.MINOR.PATCH-rcN." >&2
+            exit 1
           fi
 
           xcode_build="$(xcodebuild -version | awk '/Build version/{print $3}')"
@@ -83,8 +58,6 @@ jobs:
           {
             echo "commit_sha=${commit_sha}"
             echo "release_tag=${release_tag}"
-            echo "release_mode=${release_mode}"
-            echo "verify_tag=${verify_tag}"
             echo "xcode_build=${xcode_build}"
           } >> "${GITHUB_OUTPUT}"
 
@@ -92,8 +65,8 @@ jobs:
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_TAG: ${{ steps.metadata.outputs.release_tag }}
-          RELEASE_COMMIT_SHA: ${{ steps.metadata.outputs.commit_sha }}
           RELEASE_ARCHS: arm64
+          RELEASE_COMMIT_SHA: ${{ steps.metadata.outputs.commit_sha }}
         run: ./Scripts/release.sh preflight
 
       - name: Lint formatting
@@ -127,11 +100,11 @@ jobs:
             test
 
   build:
-    name: Sign and notarize release
+    name: Sign and notarize candidate
     needs: preflight
     runs-on: macos-26
     timeout-minutes: 75
-    environment: production
+    environment: release-candidate
     permissions:
       contents: read
 
@@ -168,7 +141,7 @@ jobs:
           [[ -n "${CERTIFICATE_PASSWORD}" ]] || { echo "Missing Developer ID certificate password." >&2; exit 1; }
 
           certificate_path="${RUNNER_TEMP}/developer-id-application.p12"
-          keychain_path="${RUNNER_TEMP}/rhythm-production.keychain-db"
+          keychain_path="${RUNNER_TEMP}/rhythm-release-candidate.keychain-db"
           keychain_password="$(uuidgen)"
           login_keychain="$(security login-keychain -d user | tr -d '"')"
 
@@ -206,7 +179,7 @@ jobs:
           APP_SPECIFIC_PASSWORD: ${{ secrets.APP_SPECIFIC_PASSWORD || secrets.NOTARY_APP_PASSWORD }}
         run: ./Scripts/setup-notarytool-profile.sh
 
-      - name: Build release payload
+      - name: Build candidate payload
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           ARCHIVE_PROVISIONING_PROFILE_SPECIFIER: ${{ vars.ARCHIVE_PROVISIONING_PROFILE_SPECIFIER }}
@@ -217,15 +190,15 @@ jobs:
           RELEASE_COMMIT_SHA: ${{ needs.preflight.outputs.commit_sha }}
         run: ./Scripts/release.sh build
 
-      - name: Upload signed release artifact
+      - name: Upload release candidate artifact
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: rhythm-release-${{ needs.preflight.outputs.release_tag }}
+          name: rhythm-release-candidate-${{ needs.preflight.outputs.release_tag }}
           path: dist/github-release/${{ needs.preflight.outputs.release_tag }}/artifacts/
           if-no-files-found: warn
           compression-level: 0
-          retention-days: 30
+          retention-days: 14
 
       - name: Clean temporary keychain
         if: always()
@@ -237,35 +210,3 @@ jobs:
           if [[ -n "${RUNNER_CERTIFICATE_PATH:-}" ]]; then
             rm -f "${RUNNER_CERTIFICATE_PATH}"
           fi
-
-  publish:
-    name: Publish GitHub release
-    needs: [preflight, build]
-    runs-on: macos-26
-    timeout-minutes: 15
-    permissions:
-      contents: write
-
-    steps:
-      - name: Checkout validated publisher
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
-        with:
-          ref: ${{ needs.preflight.outputs.commit_sha }}
-          persist-credentials: false
-
-      - name: Download signed release artifact
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
-        with:
-          name: rhythm-release-${{ needs.preflight.outputs.release_tag }}
-          path: ${{ runner.temp }}/rhythm-release-assets
-
-      - name: Create draft, verify assets, and publish
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GITHUB_RELEASE_MODE: ${{ needs.preflight.outputs.release_mode }}
-          GITHUB_RELEASE_TARGET: ${{ needs.preflight.outputs.commit_sha }}
-          GITHUB_RELEASE_VERIFY_TAG: ${{ needs.preflight.outputs.verify_tag }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          GITHUB_TAG: ${{ needs.preflight.outputs.release_tag }}
-          RELEASE_DIR: ${{ runner.temp }}/rhythm-release-assets
-        run: ./Scripts/publish-github-release.sh

@@ -10,6 +10,7 @@ DerivedData/
 .build/
 build/
 dist/
+.env.release
 
 # App packaging
 *.ipa
