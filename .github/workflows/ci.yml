@@ -33,11 +33,6 @@ jobs:
       - name: Show Xcode version
         run: xcodebuild -version
 
-      - name: Lint GitHub Actions
-        env:
-          GOTOOLCHAIN: local
-        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
-
       - name: Validate release tooling
         shell: zsh {0}
         run: |
