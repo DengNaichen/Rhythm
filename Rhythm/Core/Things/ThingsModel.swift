@@ -1,257 +1,199 @@
-//
-//  ThingsModel.swift
-//  Rhythm
-//
-//  Created by Naicheng Deng on 2026-03-12.
-//
-
 import Foundation
 
-struct ThingsTaskCreationRequest {
-    var title: String
-    var notes: String?
-    var when: String?
-    var deadline: String?
-    var tags: [String]?
-    var checklistItems: [String]?
-    var listID: String?
-    var listTitle: String?
-    var heading: String?
-    var headingID: String?
+enum ThingsEntityKind: String, CaseIterable, Codable, Sendable {
+  case all
+  case todo
+  case heading
+  case project
+  case area
+  case tag
 }
 
-struct NormalizedThingsTaskCreationRequest {
-    let title: String
-    let notes: String?
-    let when: String?
-    let deadline: String?
-    let tags: [String]
-    let checklistItems: [String]
-    let listID: String?
-    let listTitle: String?
-    let heading: String?
-    let headingID: String?
+enum ThingsItemStatus: String, CaseIterable, Codable, Sendable {
+  case incomplete
+  case completed
+  case canceled
+  case all
 }
 
-enum ThingsTaskCreationValidationError: Error, LocalizedError {
-    case blankTitle
-    case invalidField(name: String, reason: String)
+enum ThingsBuiltinList: String, CaseIterable, Codable, Sendable {
+  case all
+  case inbox
+  case today
+  case tomorrow
+  case upcoming
+  case anytime
+  case someday
+  case deadlines
+  case logbook
+  case repeating
+  case trash
+}
 
-    var errorDescription: String? {
-        switch self {
-        case .blankTitle:
-            return "Task title must not be empty."
-        case let .invalidField(name, reason):
-            return "Invalid \(name): \(reason)"
-        }
+enum ThingsShowList: String, CaseIterable, Sendable {
+  case inbox
+  case today
+  case tomorrow
+  case upcoming
+  case anytime
+  case someday
+  case deadlines
+  case logbook
+  case repeating
+  case allProjects = "all-projects"
+  case loggedProjects = "logged-projects"
+}
+
+enum ThingsOrderBy: String, CaseIterable, Codable, Sendable {
+  case things
+  case createdAt = "created_at"
+  case updatedAt = "updated_at"
+  case scheduledDate = "scheduled_date"
+  case reminderAt = "reminder_at"
+  case deadline
+  case completedAt = "completed_at"
+  case title
+}
+
+enum ThingsOrderDirection: String, CaseIterable, Codable, Sendable {
+  case ascending = "asc"
+  case descending = "desc"
+}
+
+struct ThingsPageRequest: Equatable, Sendable {
+  nonisolated static let defaultLimit = 50
+  nonisolated static let maximumLimit = 250
+
+  let offset: Int
+  let limit: Int
+
+  init(offset: Int = 0, limit: Int = defaultLimit) {
+    self.offset = max(offset, 0)
+    self.limit = max(limit, 1)
+  }
+}
+
+struct ThingsPage<Item: Encodable>: Encodable {
+  let count: Int
+  let items: [Item]
+  let nextCursor: String?
+  let hasMore: Bool
+
+  enum CodingKeys: String, CodingKey {
+    case count
+    case items
+    case nextCursor = "next_cursor"
+    case hasMore = "has_more"
+  }
+
+  init(items: [Item], nextCursor: String?) {
+    self.count = items.count
+    self.items = items
+    self.nextCursor = nextCursor
+    self.hasMore = nextCursor != nil
+  }
+}
+
+nonisolated enum ThingsEntityID {
+  static func make(_ kind: ThingsEntityKind, rawID: String) -> String {
+    "\(kind.rawValue):\(rawID)"
+  }
+
+  static func parse(_ value: String) -> (kind: ThingsEntityKind?, rawID: String) {
+    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard let separator = trimmed.firstIndex(of: ":") else {
+      return (nil, trimmed)
     }
-}
 
-extension ThingsTaskCreationRequest {
-    func normalized() throws -> NormalizedThingsTaskCreationRequest {
-        let normalizedTitle = Self.normalizeScalar(title)
-        guard let normalizedTitle, !normalizedTitle.isEmpty else {
-            throw ThingsTaskCreationValidationError.blankTitle
-        }
+    let prefix = String(trimmed[..<separator])
+    let rawID = String(trimmed[trimmed.index(after: separator)...])
+    guard let kind = ThingsEntityKind(rawValue: prefix), kind != .all else {
+      return (nil, trimmed)
+    }
+    return (kind, rawID)
+  }
 
-        let normalizedNotes = Self.normalizeScalar(notes)
-        let normalizedWhen = Self.normalizeScalar(when)
-        let normalizedDeadline = Self.normalizeScalar(deadline)
-        let normalizedListID = Self.normalizeScalar(listID)
-        let normalizedListTitle = normalizedListID == nil ? Self.normalizeScalar(listTitle) : nil
-        let normalizedHeadingID = Self.normalizeScalar(headingID)
-        let normalizedHeading = normalizedHeadingID == nil ? Self.normalizeScalar(heading) : nil
-        let normalizedTags = try Self.normalizeCollection(tags, fieldName: "tags")
-        let normalizedChecklistItems = try Self.normalizeCollection(
-            checklistItems,
-            fieldName: "checklist_items"
-        )
-
-        return NormalizedThingsTaskCreationRequest(
-            title: normalizedTitle,
-            notes: normalizedNotes,
-            when: normalizedWhen,
-            deadline: normalizedDeadline,
-            tags: normalizedTags,
-            checklistItems: normalizedChecklistItems,
-            listID: normalizedListID,
-            listTitle: normalizedListTitle,
-            heading: normalizedHeading,
-            headingID: normalizedHeadingID
-        )
+  static func rawID(_ value: String, expectedKind: ThingsEntityKind? = nil) throws -> String {
+    let parsed = parse(value)
+    if let expectedKind, let actualKind = parsed.kind, actualKind != expectedKind {
+      throw ThingsServiceError.entityTypeMismatch(
+        expected: expectedKind.rawValue,
+        actual: actualKind.rawValue
+      )
     }
 
-    private static func normalizeScalar(_ value: String?) -> String? {
-        guard let value else {
-            return nil
-        }
-
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
+    guard !parsed.rawID.isEmpty else {
+      throw ThingsServiceError.invalidIdentifier(value)
     }
-
-    private static func normalizeCollection(
-        _ values: [String]?,
-        fieldName: String
-    ) throws -> [String] {
-        guard let values else {
-            return []
-        }
-
-        var normalizedValues: [String] = []
-        normalizedValues.reserveCapacity(values.count)
-
-        for rawValue in values {
-            let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else {
-                throw ThingsTaskCreationValidationError.invalidField(
-                    name: fieldName,
-                    reason: "values must not be empty"
-                )
-            }
-
-            normalizedValues.append(trimmed)
-        }
-
-        return normalizedValues
-    }
-}
-
-struct ThingsChecklistItem: Encodable, Equatable {
-    let title: String
-    let status: String
-}
-
-struct ThingsTodo: Encodable, Equatable {
-    let uuid: String
-    let title: String
-    let type: String
-    let status: String?
-    let list: String?
-    let startDate: String?
-    let deadline: String?
-    let completedDate: String?
-    let created: String?
-    let modified: String?
-    let notes: String?
-    let areaTitle: String?
-    let projectTitle: String?
-    let headingTitle: String?
-    let parentProjectStart: String?
-    let tags: [String]
-    let checklistItems: [ThingsChecklistItem]
-    let todayIndex: Int
-}
-
-struct ThingsProject: Encodable, Equatable {
-    let uuid: String
-    let title: String
-    let areaTitle: String?
-    let notes: String?
-    let created: String?
-    let modified: String?
-    let headingTitles: [String]
-    let todoTitles: [String]
-}
-
-struct ThingsArea: Encodable, Equatable {
-    let uuid: String
-    let title: String
-    let projectTitles: [String]
-    let todoTitles: [String]
-}
-
-struct ThingsTag: Encodable, Equatable {
-    let uuid: String
-    let title: String
-    let shortcut: String?
-    let taggedTodoTitles: [String]
-}
-
-struct ThingsCollectionResponse<Item: Encodable>: Encodable {
-    let count: Int
-    let items: [Item]
-
-    init(items: [Item]) {
-        self.count = items.count
-        self.items = items
-    }
-}
-
-struct ThingsActionResult: Encodable {
-    let message: String
-    let id: String?
-    let title: String?
-}
-
-struct ShowItemRequest: Equatable {
-    let target: String
-    let query: String?
-    let filterTags: [String]?
-}
-
-enum ShowTarget: Equatable {
-    case list(id: String)
-    case item(id: String, displayTitle: String)
-}
-
-enum CompletableTodoStatus: String, Encodable, Equatable {
-    case incomplete
-    case completed
-    case canceled
-}
-
-struct CompletableTodoReference: Equatable {
-    let id: String
-    let title: String
-    let status: CompletableTodoStatus
-}
-
-enum ThingsResolutionError: Error, LocalizedError {
-    case showTargetNotFound(String)
-    case ambiguousShowTarget(String)
-    case completableTodoNotFound(String)
-    case ambiguousCompletableTodo(String)
-    case todoAlreadyCompleted(String)
-    case todoCanceled(String)
-
-    var errorDescription: String? {
-        switch self {
-        case let .showTargetNotFound(target):
-            return "No matching item found for target: \(target)"
-        case let .ambiguousShowTarget(target):
-            return "Multiple items matched target: \(target)"
-        case let .completableTodoNotFound(target):
-            return "No matching incomplete todo found for target: \(target)"
-        case let .ambiguousCompletableTodo(target):
-            return "Multiple todos matched target: \(target)"
-        case let .todoAlreadyCompleted(title):
-            return "Todo is already completed: \(title)"
-        case let .todoCanceled(title):
-            return "Todo is canceled and cannot be completed: \(title)"
-        }
-    }
+    return parsed.rawID
+  }
 }
 
 enum ThingsServiceError: Error, LocalizedError {
-    case invalidDate
-    case listFiltersRequireListTarget
-    case missingAuthToken
-    case missingRequiredArgument(String)
-    case invalidType(String, expected: String)
+  case invalidDate(String)
+  case invalidCursor(String)
+  case invalidIdentifier(String)
+  case entityNotFound(String)
+  case ambiguousReference(String)
+  case entityTypeMismatch(expected: String, actual: String)
+  case missingAuthToken
+  case missingRequiredArgument(String)
+  case invalidType(String, expected: String)
+  case invalidValue(String, reason: String)
+  case conflictingArguments(String, String)
+  case noChanges
 
-    var errorDescription: String? {
-        switch self {
-        case .invalidDate:
-            return "Invalid date: expected YYYY-MM-DD"
-        case .listFiltersRequireListTarget:
-            return "query and filter_tags can only be used with list targets"
-        case .missingAuthToken:
-            return "Could not read the Things URL auth token."
-        case let .missingRequiredArgument(argument):
-            return "Missing required argument: \(argument)"
-        case let .invalidType(argument, expected):
-            return "Invalid argument type for \(argument): expected \(expected)"
-        }
+  var errorDescription: String? {
+    switch self {
+    case .invalidDate(let value):
+      return "Invalid date \(value): expected a real date in YYYY-MM-DD format."
+    case .invalidCursor(let value):
+      return "Invalid cursor: \(value)"
+    case .invalidIdentifier(let value):
+      return "Invalid Things identifier: \(value)"
+    case .entityNotFound(let value):
+      return "No Things entity found for: \(value)"
+    case .ambiguousReference(let value):
+      return "Multiple Things entities matched: \(value)"
+    case .entityTypeMismatch(let expected, let actual):
+      return "Expected a \(expected) reference, received \(actual)."
+    case .missingAuthToken:
+      return "Could not read the Things URL auth token."
+    case .missingRequiredArgument(let argument):
+      return "Missing required argument: \(argument)"
+    case .invalidType(let argument, let expected):
+      return "Invalid argument type for \(argument): expected \(expected)"
+    case .invalidValue(let argument, let reason):
+      return "Invalid value for \(argument): \(reason)"
+    case .conflictingArguments(let first, let second):
+      return "Arguments \(first) and \(second) cannot be used together."
+    case .noChanges:
+      return "No changes were provided."
     }
+  }
+}
+
+protocol ThingsRepository: AnyObject {
+  func search(_ query: ThingsSearchQuery) throws -> ThingsPage<ThingsSearchHit>
+  func fetch(_ reference: String, includeItems: Bool) throws -> ThingsEntity
+  func listTodos(_ query: ThingsTodoQuery) throws -> ThingsPage<ThingsTodo>
+  func getTodo(id: String) throws -> ThingsTodo
+  func listHeadings(_ query: ThingsHeadingQuery) throws -> ThingsPage<ThingsHeading>
+  func getHeading(idOrTitle: String, includeTodos: Bool) throws -> ThingsHeading
+  func listProjects(_ query: ThingsProjectQuery) throws -> ThingsPage<ThingsProject>
+  func getProject(idOrTitle: String, includeTodos: Bool) throws -> ThingsProject
+  func listAreas(_ query: ThingsDirectoryQuery) throws -> ThingsPage<ThingsArea>
+  func listTags(_ query: ThingsDirectoryQuery) throws -> ThingsPage<ThingsTag>
+  func resolveShowTarget(_ target: String) throws -> ThingsReference
+  func authToken() throws -> String?
+}
+
+extension ThingsRepository {
+  func listHeadings(_ query: ThingsHeadingQuery) throws -> ThingsPage<ThingsHeading> {
+    throw ThingsServiceError.entityNotFound("headings")
+  }
+
+  func getHeading(idOrTitle: String, includeTodos: Bool) throws -> ThingsHeading {
+    throw ThingsServiceError.entityNotFound(idOrTitle)
+  }
 }

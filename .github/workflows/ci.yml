@@ -50,4 +50,19 @@ jobs:
             -configuration Debug \
             -destination "platform=macOS" \
             CODE_SIGNING_ALLOWED=NO \
+            SWIFT_VERSION=5 \
+            OTHER_SWIFT_FLAGS='$(inherited) -enable-bare-slash-regex' \
             build
+
+      - name: Test
+        run: |
+          xcodebuild \
+            -project Rhythm.xcodeproj \
+            -scheme Rhythm \
+            -configuration Debug \
+            -destination "platform=macOS" \
+            CODE_SIGNING_ALLOWED=NO \
+            SWIFT_VERSION=5 \
+            OTHER_SWIFT_FLAGS='$(inherited) -enable-bare-slash-regex' \
+            -only-testing:RhythmTests \
+            test

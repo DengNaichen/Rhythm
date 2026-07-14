@@ -35,9 +35,22 @@
 		6DE5048D2F639FCE00B1CAAF /* RhythmUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RhythmUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		A10000012FA0000100000001 /* Exceptions for "Rhythm" folder in "Rhythm" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 6DE504732F639FCC00B1CAAF /* Rhythm */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		6DE504762F639FCC00B1CAAF /* Rhythm */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				A10000012FA0000100000001 /* Exceptions for "Rhythm" folder in "Rhythm" target */,
+			);
 			path = Rhythm;
 			sourceTree = "<group>";
 		};
@@ -448,15 +461,16 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_RESOURCE_ACCESS_CALENDARS = YES;
 				ENABLE_USER_SELECTED_FILES = readwrite;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Rhythm/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Rhythm;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_LSMultipleInstancesProhibited = YES;
 				INFOPLIST_KEY_LSUIElement = YES;
-				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Rhythm needs access to provide event information to the MCP server.";
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Rhythm needs calendar access to read and manage events requested through the MCP server.";
+				INFOPLIST_KEY_NSAppleEventsUsageDescription = "Rhythm uses Things automation to manage areas, tags, and Trash actions requested through the MCP server.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Rhythm uses the local network to connect to the MCP server.";
-				INFOPLIST_KEY_NSRemindersFullAccessUsageDescription = "Rhythm needs access to provide reminders information to the MCP server.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -491,15 +505,16 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_RESOURCE_ACCESS_CALENDARS = YES;
 				ENABLE_USER_SELECTED_FILES = readwrite;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Rhythm/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Rhythm;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_LSMultipleInstancesProhibited = YES;
 				INFOPLIST_KEY_LSUIElement = YES;
-				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Rhythm needs access to provide event information to the MCP server.";
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Rhythm needs calendar access to read and manage events requested through the MCP server.";
+				INFOPLIST_KEY_NSAppleEventsUsageDescription = "Rhythm uses Things automation to manage areas, tags, and Trash actions requested through the MCP server.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Rhythm uses the local network to connect to the MCP server.";
-				INFOPLIST_KEY_NSRemindersFullAccessUsageDescription = "Rhythm needs access to provide reminders information to the MCP server.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
