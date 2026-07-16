@@ -170,7 +170,8 @@ jobs:
           certificate_path="${RUNNER_TEMP}/developer-id-application.p12"
           keychain_path="${RUNNER_TEMP}/rhythm-production.keychain-db"
           keychain_password="$(uuidgen)"
-          login_keychain="$(security login-keychain -d user | tr -d '"')"
+          login_keychain="$(security login-keychain -d user 2>/dev/null || true)"
+          login_keychain="${login_keychain//\"/}"
 
           printf '%s' "${CERTIFICATE_BASE64}" | base64 -D > "${certificate_path}"
           security create-keychain -p "${keychain_password}" "${keychain_path}"
@@ -187,7 +188,11 @@ jobs:
             -s \
             -k "${keychain_password}" \
             "${keychain_path}"
-          security list-keychains -d user -s "${keychain_path}" "${login_keychain}"
+          keychain_search_list=("${keychain_path}")
+          if [[ -n "${login_keychain}" ]]; then
+            keychain_search_list+=("${login_keychain}")
+          fi
+          security list-keychains -d user -s "${keychain_search_list[@]}"
           security default-keychain -d user -s "${keychain_path}"
           security find-identity -v -p codesigning "${keychain_path}"
 
